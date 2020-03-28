@@ -75,7 +75,7 @@ def inbox(ws):
             redis.public(REDIS_CHAN, message)
 
 
-@sockets.route("receive")
+@sockets.route("/receive")
 def outbox(ws):
     """ Sends outgoing messages via GameBackend. """
 

@@ -22,6 +22,7 @@ inbox.onmessage = function(message) {
 };
 
 $("#input-form").on("submit", function(event) {
+  console.log("Test");
   event.preventDefault();
   var handle = $("#input-handle")[0].value;
   var text = $("#input-text")[0].value;

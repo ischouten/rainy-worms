@@ -26,10 +26,10 @@ class GameBackend(object):
         self.pubsub.subscribe(REDIS_CHAN)
 
     def __iter_data(self):
-        for message in self.pubusb.listen():
+        for message in self.pubsub.listen():
             data = message.get("data")
             if message["type"] == "message":
-                log.info(f"Sending messsage: {data}")
+                app.logger.info(f"Sending messsage: {data}")
                 yield data
 
     def register(self, client):
@@ -57,6 +57,9 @@ class GameBackend(object):
         gevent.spawn(self.run)
 
 
+games = GameBackend()
+
+
 @app.route("/")
 def hello():
     return render_template("index.html")
@@ -66,12 +69,13 @@ def hello():
 def inbox(ws):
     """ Receives incoming messages, inserts them into Redis. """
     while not ws.closed:
+        app.logger.info("Submit")
         # Sleep to prevent *constant* context-switches
         gevent.sleep(0.1)
         message = ws.receive()
 
         if message:
-            log.info(f"Inserting message: {message}")
+            app.logger.info(f"Inserting message: {message}")
             redis.public(REDIS_CHAN, message)
 
 
@@ -80,13 +84,12 @@ def outbox(ws):
     """ Sends outgoing messages via GameBackend. """
 
     games.register(ws)
+    app.logger.info("Receive open...")
     while not ws.closed:
         # Context switch while `GameBackend.start` is running in the background.
         gevent.sleep(0.1)
 
 
-if __name__ == "__main__":
-    log.info("Hello!")
+app.logger.info("Hello!")
 
-    games = GameBackend()
-    games.start()
+games.start()

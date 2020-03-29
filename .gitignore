@@ -2,5 +2,6 @@
 **/.vscode
 .python-version
 .env
+**/node_modules
 
 **/__pycache__

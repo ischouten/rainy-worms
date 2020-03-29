@@ -12,6 +12,8 @@ flask-sockets = "*"
 gunicorn = "*"
 redis = "*"
 logquicky = "*"
+flask-cors = "*"
+flask-socketio = "*"
 
 [requires]
 python_version = "3.8"

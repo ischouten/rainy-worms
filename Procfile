@@ -1,1 +1,1 @@
-web: gunicorn -k flask_sockets.worker rainworms:app
+web: gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 rainworms:app

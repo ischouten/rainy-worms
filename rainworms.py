@@ -5,9 +5,6 @@ from flask_socketio import SocketIO, send, emit
 import time
 from datetime import datetime
 
-REDIS_URL = os.environ.get("REDIS_URL", "")
-REDIS_CHAN = "rainworms"
-
 log = logquicky.load("rainworms")
 
 serve_dir = "ui/build/"

@@ -27,7 +27,7 @@ export default class App extends React.Component {
 
   sendMessage = () => {
     this.socket.emit("clickedButton", "The button was clicked.");
-    console.log("Should send message from");
+    console.log("Should send message");
   };
 
   render() {

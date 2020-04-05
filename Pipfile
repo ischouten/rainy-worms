@@ -13,9 +13,14 @@ gunicorn = "*"
 logquicky = "*"
 flask-cors = "*"
 flask-socketio = "*"
+flask-session = "*"
+werkzeug = "==0.16.0"
 
 [requires]
 python_version = "3.8"
 
 [pipenv]
 allow_prereleases = true
+
+[scripts]
+develop = "python rainworms.py"

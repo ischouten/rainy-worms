@@ -3,5 +3,5 @@
 .python-version
 .env
 **/node_modules
-
+**/flask_session/
 **/__pycache__

@@ -3,31 +3,36 @@ import "./App.css";
 import openSocket from "socket.io-client";
 import MessageList from "./messageList";
 
+const defaultState = {
+  playerName: "",
+  gameEvents: [],
+  inProgress: false,
+};
+var domain =
+  window.location.protocol +
+  "//" +
+  window.location.hostname +
+  ":" +
+  window.location.port;
+
+if (process.env.NODE_ENV === "development") {
+  domain = window.location.protocol + "//" + window.location.hostname + ":5000";
+  console.log("Connecting to " + domain);
+}
+
 export default class App extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {
-      playerName: "",
-      gameEvents: [],
-    };
+    this.state = defaultState;
+  }
 
-    var domain =
-      window.location.protocol +
-      "//" +
-      window.location.hostname +
-      ":" +
-      window.location.port;
-
-    if (process.env.NODE_ENV === "development") {
-      domain =
-        window.location.protocol + "//" + window.location.hostname + ":5000";
-      console.log("Connecting to " + domain);
-    }
-
-    this.loadStatus(domain);
-
+  componentDidMount = () => {
     this.socket = openSocket(domain);
+    this.loadStatus();
+    this.setState(defaultState);
+
+    console.log("State: " + JSON.stringify(this.state));
 
     this.socket.on("gameEvnt", (gameEvnt) => {
       console.log(
@@ -37,9 +42,9 @@ export default class App extends React.Component {
         gameEvents: [...this.state.gameEvents, gameEvnt],
       });
     });
-  }
+  };
 
-  loadStatus = async (domain) => {
+  loadStatus = async () => {
     await fetch(domain + "/status", {
       headers: {
         Accept: "application/json",
@@ -49,7 +54,11 @@ export default class App extends React.Component {
       .then((response) => response.json())
       .then((json) => {
         console.log("Events: " + JSON.stringify(json));
-        this.setState({ gameEvents: json });
+        this.setState({
+          playerName: json.playerName,
+          inProgress: json.inProgress,
+          gameEvents: json.events,
+        });
       });
   };
 
@@ -57,9 +66,10 @@ export default class App extends React.Component {
     this.setState({ playerName: event.target.value });
   };
 
-  handleSubmit = (event) => {
+  handleJoin = (event) => {
     event.preventDefault();
     this.socket.emit("join", this.state.playerName);
+    this.setState({ inProgress: true });
     console.log("TX: Join: " + this.state.playerName);
   };
 
@@ -70,22 +80,35 @@ export default class App extends React.Component {
     console.log("TX: " + JSON.stringify(eventMsg));
   };
 
+  handleLeave = (event) => {
+    this.socket.emit("gameEvnt", { action: "leaveGame" });
+    console.log("TX: Leave Game");
+    this.setState({ defaultState });
+  };
+
   render() {
     return (
       <div className="App">
-        <form onSubmit={this.handleSubmit}>
-          <label>
-            Name:
-            <input
-              type="text"
-              value={this.state.playerName}
-              onChange={this.handleChange}
-            />
-          </label>
-          <input type="submit" value="Submit" />
-        </form>
-        <button onClick={this.handleRoll}>Roll</button>
-        <MessageList id="console" events={this.state.gameEvents} />
+        {!this.state.inProgress && (
+          <form onSubmit={this.handleJoin}>
+            <label>
+              Name:
+              <input
+                type="text"
+                value={this.state.playerName}
+                onChange={this.handleChange}
+              />
+            </label>
+            <input type="submit" value="Join" />
+          </form>
+        )}
+        {this.state.inProgress && (
+          <div>
+            <MessageList id="console" events={this.state.gameEvents} />
+            <button onClick={this.handleRoll}>Roll</button>
+            <button onClick={this.handleLeave}>Leave</button>
+          </div>
+        )}
       </div>
     );
   }

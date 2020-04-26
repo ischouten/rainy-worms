@@ -1,8 +1,7 @@
 import React from "react";
 
 function menuBar(props) {
-  console.log(props);
-  return <div>You are: {props.player.name ? props.player.name : "Noone"}</div>;
+  return <div>You are: {props.player.name ? props.player.name : ""}</div>;
 }
 
 export default menuBar;

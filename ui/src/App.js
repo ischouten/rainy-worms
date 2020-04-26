@@ -7,12 +7,11 @@ import MenuBar from "./components/menuBar";
 const defaultState = {
   playerInfo: {
     name: "",
-    registered: false,
+    status: "new",
   },
   gameInfo: {
-    gameCode: "",
-    events: [],
-    inProgress: false,
+    status: "new",
+    joinCode: null,
   },
 };
 
@@ -40,8 +39,6 @@ export default class App extends React.Component {
     this.loadStatus();
     this.setState(defaultState);
 
-    console.log("State: " + JSON.stringify(this.state));
-
     this.socket.on("gameEvnt", (gameEvnt) => {
       console.log(
         "RX: " + gameEvnt.id + ", action: " + JSON.stringify(gameEvnt.action)
@@ -52,11 +49,16 @@ export default class App extends React.Component {
     });
 
     this.socket.on("register", (e) => {
-      console.log("RX: " + JSON.stringify(e));
       this.setState({
         playerInfo: e,
       });
-      console.log("New state: " + JSON.stringify(this.state));
+      console.log("RX new state: " + JSON.stringify(this.state));
+    });
+
+    this.socket.on("playerJoin", (e) => {
+      this.setState({
+        gameInfo: e,
+      });
     });
 
     this.socket.on("createGame", (e) => {
@@ -79,22 +81,28 @@ export default class App extends React.Component {
       .then((json) => {
         console.log("Loading status after refresh: \n" + JSON.stringify(json));
         this.setState({
-          gameInfo: json.gameInfo,
           playerInfo: json.playerInfo,
+          gameInfo: json.gameInfo,
         });
       });
   };
 
   handleNameChange = (e) => {
-    let newState = this.state.playerInfo;
-    newState["name"] = e.target.value;
-    this.setState(newState);
+    let newPlayerName = this.state.playerInfo.name;
+    newPlayerName = e.target.value;
+
+    const prevState = this.state;
+    prevState.playerInfo.name = newPlayerName;
+    this.setState(prevState);
   };
 
   handleRegister = (e) => {
     e.preventDefault();
+
     const playerName = this.state.playerInfo.name;
-    console.log("Registering player: " + playerName);
+
+    let newState = this.state.playerInfo;
+    newState["status"] = "registering";
     this.socket.emit("register", playerName);
   };
 
@@ -104,10 +112,27 @@ export default class App extends React.Component {
     console.log("TX: Create game");
   };
 
-  handleJoin = (event) => {
-    event.preventDefault();
-    this.socket.emit("join", this.state.gameCode);
-    console.log("TX: Join: " + this.state.gameCode);
+  handleJoinGame = (e) => {
+    e.preventDefault();
+    console.log("TX: Join: " + this.state.gameInfo.joinCode);
+    this.socket.emit("join", this.state.gameInfo.joinCode);
+  };
+
+  handeJoinCodeChange = (e) => {
+    e.preventDefault();
+    console.log("Setting join code to " + e.target.value);
+    let prevGameInfo = this.state.gameInfo;
+    prevGameInfo["joinCode"] = e.target.value;
+    this.setState({ gameInfo: prevGameInfo });
+    console.log(JSON.stringify(this.state));
+  };
+
+  handleReset = (e) => {
+    console.log("Resetting state");
+    let newState = this.state.defaultState;
+    this.setState(newState);
+    this.socket.emit("resetUser", { action: "resetUser" });
+    this.loadStatus();
   };
 
   handleRoll = (e) => {
@@ -117,17 +142,19 @@ export default class App extends React.Component {
     console.log("TX: " + JSON.stringify(eventMsg));
   };
 
-  handleLeave = (event) => {
+  handleLeave = (e) => {
     this.socket.emit("gameEvnt", { action: "leaveGame" });
     console.log("TX: Leave Game");
     this.setState({ defaultState });
   };
 
   render() {
+    console.log("Render state: " + JSON.stringify(this.state));
+
     return (
       <div className="App">
         <MenuBar player={this.state.playerInfo} />
-        {!this.state.playerInfo.registered && (
+        {this.state.playerInfo.status === "new" && (
           <form onSubmit={this.handleRegister}>
             <label>
               Name:
@@ -141,39 +168,53 @@ export default class App extends React.Component {
           </form>
         )}
 
-        {this.state.playerInfo.registered && !this.state.gameInfo.gameCode && (
-          <div>
-            <button onClick={this.handleCreate}>Create new game</button>
-            <form onSubmit={this.handleJoinGame}>
-              <label>Game code:</label>
-              <input
-                type="text"
-                value={this.state.gameCode}
-                onChange={this.handeGameCodeChange}
-              />
-            </form>
-            <input type="submit" value="Join game" />
-          </div>
-        )}
+        {this.state.playerInfo.status === "registered" &&
+          !this.state.gameInfo.status && (
+            <div>
+              <button onClick={this.handleCreate}>Create new game</button>
+              <form onSubmit={this.handleJoinGame}>
+                <label>Game code:</label>
+                <input
+                  type="text"
+                  value={this.state.joinCode}
+                  onChange={this.handeJoinCodeChange}
+                />
+                <input type="submit" value="Join game" />
+              </form>
+            </div>
+          )}
 
-        {this.state.gameInfo.gameCode && (
+        {this.state.gameInfo.status === "waiting" && (
           <div>
-            Game code: {this.state.gameInfo.gameCode}
+            Game code: {this.state.gameInfo.joinCode}
             <br />
             Waiting for players to join...
-            <div>Players: {this.state.gameInfo.players}</div>
             <br />
-            Start game.
+            <br />
+            <div>
+              Players:
+              <ul>
+                {this.state.gameInfo.players.map((playerName) => (
+                  <li key={playerName}>{playerName}</li>
+                ))}
+              </ul>
+            </div>
+            <br />
+            {this.state.playerInfo && <p>Start game</p>}
           </div>
         )}
 
-        {this.state.inProgress && (
+        {this.state.gameInfo.status === "started" && (
           <div>
             <MessageList id="console" events={this.state.gameEvents} />
             <button onClick={this.handleRoll}>Roll</button>
             <button onClick={this.handleLeave}>Leave</button>
           </div>
         )}
+
+        <div>
+          <button onClick={this.handleReset}>Reset</button>
+        </div>
       </div>
     );
   }

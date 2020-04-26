@@ -8,6 +8,7 @@ import flask_session
 import time
 import random, string
 from datetime import datetime
+import game_engine
 
 log = logquicky.load("rainworms")
 
@@ -19,7 +20,7 @@ app = Flask(
 )
 
 games = {}
-players = []
+players = {}
 
 app.config["SECRET_KEY"] = os.environ.get("SESSION_SECRET", "ShouldBeSecret")
 app.config["SESSION_TYPE"] = "filesystem"
@@ -44,23 +45,21 @@ def randomword(length):
 
 @app.route("/status")
 def provide_game_status():
-    player_name = session.get("player_name", "")
-    game_code = session.get("game_code", "")
+    player = session.get("player")
+    game_code = session.get("active_game")
 
-    if session.get("player_name", "") == "":
-        inProgress = False
-    else:
-        inProgress = True
+    if player:
+        log.info(f"Refreshing status for player: {player.name}")
 
-    return jsonify(
-        {
-            "gameInfo": games.get(game_code, {}),
-            "playerInfo": {
-                "name": session.get("player_name", ""),
-                "registered": session.get("registered", False),
-            },
-        }
-    )
+    # Find out which game this player belongs to
+    game = games.get(game_code)
+    if not game:
+        game = game_engine.Game(None, None)
+
+    if not player:
+        player = game_engine.Player(None)
+
+    return jsonify({"playerInfo": player.__dict__, "gameInfo": game.__dict__})
 
 
 @app.route("/")
@@ -70,44 +69,86 @@ def index():
 
 @socketio.on("register")
 def handle_register(player_name):
-    if player_name in players:
+    log.info(f"RX register: {player_name}")
+
+    if player_name in players.keys():
         log.Warn(f"Player {player_name} is not unique. Not allowed to join.")
         return
+    player = game_engine.Player(player_name)
 
-    log.info(f"Received register: {player_name}")
-    session["player_name"] = player_name
-    session["registered"] = True
-    emit("register", {"name": player_name, "registered": True})
+    session["player"] = player
+    log.info(f"Storing {player.name} into session")
+    player.set_status("registered")
+
+    emit("register", {"name": player.name, "status": player.status})
+    log.info(f"Registered player: {player.name}")
 
 
 @socketio.on("join")
-def handle_join(player_name):
+def handle_join(join_code):
 
-    if player_name in players:
-        log.Warn(f"Player {player_name} is not unique. Not allowed to join.")
+    log.info(f"Received join: {join_code}")
+    log.info(f"Games: {games}")
+
+    player = session.get("player")
+    game = games.get(join_code)
+
+    if not game:
+        log.error(f"No game with code {join_code}")
         return
-    log.info(f"Received join: {player_name}")
-    session["player_name"] = player_name
-    log.info(f"After join {session.get('player_name', '')}")
+
+    log.info(f"Player joining game: {game.__dict__}")
+
+    if game.players and player.name in game.players:
+        log.error(
+            f"Player {player.name} already exists. Not allowed to join this game."
+        )
+        # Todo: Handle message to frontend.
+        return
+
+    # Update the game info.
+    game = games.get(join_code)
+
+    if not game:
+        log.error(f"No game with code {join_code}")
+        return
+
+    game.add_player(player)
+    session["active_game"] = join_code
+
+    socketio.emit("playerJoin", game.__dict__)
 
 
 @socketio.on("createGame")
 def handle_create(data):
     log.info(data)
-    game_code = randomword(4)
-    log.info(f"Create new game: {game_code}")
+    join_code = randomword(4)
+    log.info(f"Create new game with gameCode: {join_code}")
 
-    game_info = {
-        "gameCode": game_code,
-        "players": [session.get("player_name")],
-        "inProgress": False,
-        "events": [],
-    }
+    # Find out which player is making this request
+    player = session.get("player")
 
-    games[game_code] = game_info
-    session["game_code"] = game_code
+    # Create the new game and register it to the games collection
+    game = game_engine.Game(join_code, player)
+    game.set_status("waiting")
+    games[join_code] = game
 
-    emit("createGame", game_info)
+    # Store the current game of the player into the session to allow refreshes
+    session["active_game"] = join_code
+
+    log.info(
+        f"{player.name} created new game with code {game.joinCode}. There is now {len(games)} games."
+    )
+
+    emit("createGame", game.__dict__)
+
+
+@socketio.on("resetUser")
+def handle_reset(data):
+    log.info(f"Received: {data}")
+    session.clear()
+
+    emit("resetPlayer")
 
 
 @socketio.on("gameEvnt")

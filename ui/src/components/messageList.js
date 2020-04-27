@@ -7,7 +7,8 @@ class MessageList extends React.Component {
         {this.props.events.map((evt) => {
           return (
             <li key={evt.id}>
-              {evt.actor}: {JSON.stringify(evt.action)}
+              {evt.actor}: {JSON.stringify(evt.action)} (
+              {JSON.stringify(evt.result)})
             </li>
           );
         })}

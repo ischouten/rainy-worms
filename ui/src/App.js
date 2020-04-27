@@ -3,6 +3,7 @@ import "./App.css";
 import openSocket from "socket.io-client";
 import MessageList from "./components/messageList";
 import MenuBar from "./components/menuBar";
+import PlayingField from "./components/playingField";
 
 const defaultState = {
   playerInfo: {
@@ -39,20 +40,10 @@ export default class App extends React.Component {
     this.loadStatus();
     this.setState(defaultState);
 
-    this.socket.on("gameEvnt", (gameEvnt) => {
-      console.log(
-        "RX: " + gameEvnt.id + ", action: " + JSON.stringify(gameEvnt.action)
-      );
-      this.setState({
-        gameEvents: [...this.state.gameInfo.events, gameEvnt],
-      });
-    });
-
     this.socket.on("register", (e) => {
       this.setState({
         playerInfo: e,
       });
-      console.log("RX new state: " + JSON.stringify(this.state));
     });
 
     this.socket.on("playerJoin", (e) => {
@@ -66,7 +57,21 @@ export default class App extends React.Component {
       this.setState({
         gameInfo: e,
       });
-      console.log("New state: " + JSON.stringify(this.state));
+    });
+
+    this.socket.on("gameStarted", (e) => {
+      console.log("RX: " + JSON.stringify(e));
+      this.setState({
+        gameInfo: e,
+      });
+    });
+
+    this.socket.on("gameEvent", (e) => {
+      console.log("RX: " + JSON.stringify(e));
+
+      this.setState({
+        gameInfo: e,
+      });
     });
   };
 
@@ -118,6 +123,12 @@ export default class App extends React.Component {
     this.socket.emit("join", this.state.gameInfo.joinCode);
   };
 
+  handleStartGame = (e) => {
+    e.preventDefault();
+    console.log("TX: Starting game");
+    this.socket.emit("startGame");
+  };
+
   handeJoinCodeChange = (e) => {
     e.preventDefault();
     console.log("Setting join code to " + e.target.value);
@@ -135,10 +146,10 @@ export default class App extends React.Component {
     this.loadStatus();
   };
 
-  handleRoll = (e) => {
-    e.preventDefault();
+  handleTurn = (e) => {
+    console.log(this.state.playerInfo.name + " rolled the dice...");
     var eventMsg = { action: "roll" };
-    this.socket.emit("gameEvnt", eventMsg);
+    this.socket.emit("playerEvent", eventMsg);
     console.log("TX: " + JSON.stringify(eventMsg));
   };
 
@@ -149,8 +160,6 @@ export default class App extends React.Component {
   };
 
   render() {
-    console.log("Render state: " + JSON.stringify(this.state));
-
     return (
       <div className="App">
         <MenuBar player={this.state.playerInfo} />
@@ -200,15 +209,21 @@ export default class App extends React.Component {
               </ul>
             </div>
             <br />
-            {this.state.playerInfo && <p>Start game</p>}
+            {this.state.playerInfo &&
+              this.state.gameInfo.host === this.state.playerInfo.name && (
+                <button onClick={this.handleStartGame}>Start</button>
+              )}
           </div>
         )}
 
         {this.state.gameInfo.status === "started" && (
           <div>
-            <MessageList id="console" events={this.state.gameEvents} />
-            <button onClick={this.handleRoll}>Roll</button>
-            <button onClick={this.handleLeave}>Leave</button>
+            <MessageList id="console" events={this.state.gameInfo.events} />
+            <PlayingField
+              gameInfo={this.state.gameInfo}
+              playerName={this.state.playerInfo.name}
+              action={this.handleTurn}
+            />
           </div>
         )}
 

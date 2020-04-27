@@ -6,7 +6,6 @@ from flask_socketio import SocketIO, send, emit
 from flask_session import Session
 import flask_session
 import time
-import random, string
 from datetime import datetime
 import game_engine
 
@@ -18,9 +17,6 @@ serve_dir = "ui/build/"
 app = Flask(
     __name__, static_folder=f"{serve_dir}/static", template_folder=f"{serve_dir}"
 )
-
-games = {}
-players = {}
 
 app.config["SECRET_KEY"] = os.environ.get("SESSION_SECRET", "ShouldBeSecret")
 app.config["SESSION_TYPE"] = "filesystem"
@@ -37,29 +33,7 @@ CORS(
     resources={r"/*": {"origins": ["http://localhost:3000"]}},
 )
 
-
-def randomword(length):
-    letters = string.ascii_lowercase
-    return "".join(random.choice(letters) for i in range(length))
-
-
-@app.route("/status")
-def provide_game_status():
-    player = session.get("player")
-    game_code = session.get("active_game")
-
-    if player:
-        log.info(f"Refreshing status for player: {player.name}")
-
-    # Find out which game this player belongs to
-    game = games.get(game_code)
-    if not game:
-        game = game_engine.Game(None, None)
-
-    if not player:
-        player = game_engine.Player(None)
-
-    return jsonify({"playerInfo": player.__dict__, "gameInfo": game.__dict__})
+games_controller = game_engine.GamesController()
 
 
 @app.route("/")
@@ -67,119 +41,118 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/status")
+def provide_game_status():
+    player = session.get("player")
+    join_code = session.get("active_code")
+
+    if player:
+        log.info(f"Refreshing status for player: {player.name}")
+    else:
+        player = game_engine.Player(None)
+
+    game = games_controller.get_game(join_code)
+
+    return jsonify({"playerInfo": player.__dict__, "gameInfo": game.as_dict()})
+
+
 @socketio.on("register")
 def handle_register(player_name):
-    log.info(f"RX register: {player_name}")
+    log.info(f"RX register request: {player_name}")
 
-    if player_name in players.keys():
+    if games_controller.player_exists(player_name):
         log.Warn(f"Player {player_name} is not unique. Not allowed to join.")
         return
+
+    # Register a new player
     player = game_engine.Player(player_name)
 
-    session["player"] = player
-    log.info(f"Storing {player.name} into session")
+    # Store this player in his session
     player.set_status("registered")
+    session["player"] = player
 
+    # Notify other players
     emit("register", {"name": player.name, "status": player.status})
     log.info(f"Registered player: {player.name}")
+
+
+@socketio.on("createGame")
+def handle_create(data):
+    log.info(data)
+
+    # Store the current game of the player into the session to allow refreshes
+    game = games_controller.create_game()
+    log.info(f"The game: {game}")
+    session["active_code"] = game.join_code
+
+    emit("createGame", game.as_dict())
 
 
 @socketio.on("join")
 def handle_join(join_code):
 
     log.info(f"Received join: {join_code}")
-    log.info(f"Games: {games}")
 
     player = session.get("player")
-    game = games.get(join_code)
+    log.info(player)
+    if not player:
+        log.error("First register a player before joining.")
+        return
 
+    game = games_controller.get_game(join_code)
     if not game:
         log.error(f"No game with code {join_code}")
         return
 
-    log.info(f"Player joining game: {game.__dict__}")
-
-    if game.players and player.name in game.players:
-        log.error(
-            f"Player {player.name} already exists. Not allowed to join this game."
-        )
-        # Todo: Handle message to frontend.
-        return
-
-    # Update the game info.
-    game = games.get(join_code)
-
-    if not game:
-        log.error(f"No game with code {join_code}")
-        return
+    log.info(f"Player {player.name} joining game: {game.as_dict()}")
 
     game.add_player(player)
-    session["active_game"] = join_code
+    session["active_code"] = join_code
 
-    socketio.emit("playerJoin", game.__dict__)
+    socketio.emit("playerJoin", game.as_dict())
 
 
-@socketio.on("createGame")
-def handle_create(data):
-    log.info(data)
-    join_code = randomword(4)
-    log.info(f"Create new game with gameCode: {join_code}")
-
-    # Find out which player is making this request
+@socketio.on("startGame")
+def handle_start():
     player = session.get("player")
 
-    # Create the new game and register it to the games collection
-    game = game_engine.Game(join_code, player)
-    game.set_status("waiting")
-    games[join_code] = game
+    active_code = session.get("active_code")
+    game = games_controller.get_game(active_code)
 
-    # Store the current game of the player into the session to allow refreshes
-    session["active_game"] = join_code
+    if not player or not game:
+        log.error("Player or game does not exist.")
+        return
 
-    log.info(
-        f"{player.name} created new game with code {game.joinCode}. There is now {len(games)} games."
-    )
+    if game.host != player.name:
+        log.error("Only the host can start a game.")
 
-    emit("createGame", game.__dict__)
+    game.start()
+
+    log.info(f"RX start")
+    socketio.emit("gameStarted", game.as_dict())
 
 
 @socketio.on("resetUser")
 def handle_reset(data):
-    log.info(f"Received: {data}")
+    log.info(f"Received reset request: {data}")
     session.clear()
 
     emit("resetPlayer")
+    # TODO: Notify other players if a player leaves.
+    # socketio.emit("playerLeft", game.as_dict())
 
 
-@socketio.on("gameEvnt")
+@socketio.on("playerEvent")
 def handle_json(gameEvent):
     log.info(f"Received json: {gameEvent}")
-    evnt = parse_game_event(gameEvent)
-    socketio.emit("gameEvnt", evnt)
 
+    join_code = session.get("active_code")
+    game = games_controller.get_game(join_code)
+    player = session.get("player")
 
-def parse_game_event(evnt):
+    game_event = game.parse_event(gameEvent, player)
 
-    log.info(f"Format: {evnt}")
-    game_code = session.get("game_code")
-
-    if not game_code:
-        return
-
-    response = {
-        "id": len(games[game_code][events]) + 1,
-        "actor": session.get("player_name"),
-        "action": evnt.get("action"),
-    }
-
-    if evnt.get("action") == "leaveGame":
-        log.info("Clearing session")
-        session.clear()
-
-    log.info(f"Add: {evnt}")
-    events.append(response)
-
-    return response
+    socketio.emit("gameEvent", game.as_dict())
 
 
 if __name__ == "__main__":

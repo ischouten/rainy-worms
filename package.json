@@ -2,8 +2,8 @@
   "name": "rainworms",
   "version": "0.0.1",
   "engines": {
-    "node": "13.11.0",
-    "yarn": "1.22.4"
+    "node": "15.14.0",
+    "yarn": "1.22.10"
   },
   "scripts": {
     "build": "cd ui && yarn install && yarn build"

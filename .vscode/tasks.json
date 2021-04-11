@@ -1,0 +1,41 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run locally",
+			"type": "shell",
+			"command": "pipenv run develop",
+			"problemMatcher": [
+				"$func-watch"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "Run linter",
+			"type": "shell",
+			"command": "pipenv run lint",
+			"problemMatcher": [
+				"$func-watch"
+			]
+		},
+		{
+			"label": "Run tests",
+			"type": "shell",
+			"command": "pipenv run test",
+			"problemMatcher": [
+				"$func-watch"
+			]
+		},
+		{
+			"label": "Check type hints",
+			"type": "shell",
+			"command": "pipenv run check-hints",
+			"problemMatcher": [
+				"$func-watch"
+			]
+		}
+	]
+}

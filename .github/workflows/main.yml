@@ -1,0 +1,41 @@
+name: Run Tests
+
+# Run on push or merge of PR on any branch that's not a feature branch.
+on:
+  push:
+    tags: releases/[0-9]+.[0-9]+.[0-9]+
+    # branches-ignore: ["main"]
+    branches: ["develop", "main", "feature/**", "bugfix/**"]
+
+env:
+  PYTHON_VERSION: "3.9"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@main
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Build with pipenv"
+        shell: bash
+        run: |
+          pushd './.'
+          python -m pip install pipenv --upgrade pip
+          pipenv install --dev
+          popd
+
+      - name: "Check test"
+        shell: bash
+        run: |
+          pipenv run pytest
+
+      - name: "Check for linter errors"
+        shell: bash
+        run: |
+          pipenv run flake8 ./**/*.py -v

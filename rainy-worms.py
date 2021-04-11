@@ -2,11 +2,8 @@ import os
 import logquicky
 from flask import Flask, render_template, session, jsonify
 from flask_cors import CORS
-from flask_socketio import SocketIO, send, emit
+from flask_socketio import SocketIO, emit
 from flask_session import Session
-import flask_session
-import time
-from datetime import datetime
 import game_engine
 
 log = logquicky.load("rainworms")
@@ -26,7 +23,11 @@ app.debug = "DEBUG" in os.environ
 
 Session(app)
 
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False,)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    manage_session=False,
+)
 CORS(
     app,
     supports_credentials=True,
@@ -128,7 +129,7 @@ def handle_start():
 
     game.start()
 
-    log.info(f"RX start")
+    log.info("RX start")
     socketio.emit("gameStarted", game.as_dict())
 
 
@@ -151,6 +152,7 @@ def handle_json(gameEvent):
     player = session.get("player")
 
     game_event = game.parse_event(gameEvent, player)
+    log.info(f"Parsed: {game_event}")
 
     socketio.emit("gameEvent", game.as_dict())
 

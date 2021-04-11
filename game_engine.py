@@ -1,6 +1,7 @@
-from flask import jsonify, session
+from flask import session
 import logquicky
-import random, string
+import random
+import string
 
 log = logquicky.load("rainworms")
 
